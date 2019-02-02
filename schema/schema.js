@@ -1,38 +1,22 @@
 const graphql = require('graphql');
+const Book = require('../models/book');
+const Author = require('../models/Author');
 
 const { 
-    GraphQLObjectType, 
-    GraphQLString, 
-    GraphQLID, 
-    GraphQLInt, 
-    GraphQLSchema,
-    GraphQLList 
+    GraphQLObjectType, GraphQLString, 
+    GraphQLID, GraphQLInt,GraphQLSchema, 
+    GraphQLList,GraphQLNonNull 
 } = graphql;
 
 //Schema defines data on the Graph like object types(book type), relation between 
 //these object types and describes how it can reach into the graph to interact with 
 //the data to retrieve or mutate the data   
 
-//Dummy Data
-var books = [
-    { name:"Book 1", pages:432 , id:1, authorID:2},
-    { name: "Book 2", pages: 32, id: 2, authorID: 1},
-    { name: "Book 3", pages: 532, id: 3, authorID: 3},
-    { name: "Book 4", pages: 432, id: 2, authorID: 1 },
-    { name: "Book 5", pages: 542, id: 3, authorID: 3}
-]
-
-var authors = [
-    { name: 'Author 1', age: 44, id: 1 },
-    { name: 'Author 2', age: 42, id: 2 },
-    { name: 'Author 3', age: 66, id: 3 }
-];
-
 const BookType = new GraphQLObjectType({
     name: 'Book',
     //We are wrapping fields in the function as we dont want to execute this ultil 
-    //everything is inilized. For example below code will throw error AuthorType not found 
-    //if not wrapped in a function
+    //everything is inilized. For example below code will throw error AuthorType not 
+    //found if not wrapped in a function
     fields: () => ({
         id: { type: GraphQLID  },
         name: { type: GraphQLString }, 
@@ -40,7 +24,7 @@ const BookType = new GraphQLObjectType({
         author: {
         type: AuthorType,
         resolve(parent, args) {
-            return authors.find((item) => { return item.id == parent.authorID });
+            return Author.findById(parent.authorID);
         }
     }
     })
@@ -55,7 +39,7 @@ const AuthorType = new GraphQLObjectType({
         book:{
             type: new GraphQLList(BookType),
             resolve(parent,args){
-                return books.filter((item) => { return item.authorID == 1 });
+                return Book.find({ authorID: parent.id });
             }
         }
     })
@@ -74,34 +58,74 @@ const RootQuery = new GraphQLObjectType({
             resolve(parent, args) {
                 //Here we define how to get data from database source
 
-                //this will return the book with id passed in argument by the user
-                return books.find((item) => { return item.id == args.id});
+                //this will return the book with id passed in argument 
+                //by the user
+                return Book.findById(args.id);
             }
         },
         books:{
             type: new GraphQLList(BookType),
             resolve(parent, args) {
-                return books;
+                return Book.find({});
             }
         },
         author:{
             type: AuthorType,
             args: { id: { type: GraphQLID } },
             resolve(parent, args) {
-                return authors.find((item) => { return item.id == args.id });
+                return Author.findById(args.id);
             }
         },
         authors:{
             type: new GraphQLList(AuthorType),
             resolve(parent, args) {
-                return authors;
+                return Author.find({});
             }
         }
     }
 });
  
+//Very similar to RootQuery helps user to add/update to the database.
+const Mutation = new GraphQLObjectType({
+    name: 'Mutation',
+    fields: {
+        addAuthor: {
+            type: AuthorType,
+            args: {
+                //GraphQLNonNull make these field required
+                name: { type: new GraphQLNonNull(GraphQLString) },
+                age: { type: new GraphQLNonNull(GraphQLInt) }
+            },
+            resolve(parent, args) {
+                let author = new Author({
+                    name: args.name,
+                    age: args.age
+                });
+                return author.save();
+            }
+        },
+        addBook:{
+            type:BookType,
+            args:{
+                name: { type: new GraphQLNonNull(GraphQLString)},
+                pages: { type: new GraphQLNonNull(GraphQLInt)},
+                authorID: { type: new GraphQLNonNull(GraphQLID)}
+            },
+            resolve(parent,args){
+                let book = new Book({
+                    name:args.name,
+                    pages:args.pages,
+                    authorID:args.authorID
+                })
+                return book.save()
+            }
+        }
+    }
+});
+
 //Creating a new GraphQL Schema, with options query which defines query 
 //we will allow users to use when they are making request.
 module.exports = new GraphQLSchema({
-    query: RootQuery
+    query: RootQuery,
+    mutation:Mutation
 });
